@@ -1,0 +1,16 @@
+name: cs234_final_project
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10.16
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - gym
+  - pytorch
+  - stable-baselines3
+  - clawpack
+  - pip
+  - pip:
+      - stable-baselines3
