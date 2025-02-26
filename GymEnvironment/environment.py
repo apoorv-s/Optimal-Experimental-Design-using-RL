@@ -8,8 +8,8 @@ class SensorOptimalPlacement(gym.Env):
     metadata = {"render_modes": [None]} #todo: enable render later
     def __init__(self, width, length, n_sensor,seed):
         super().__init__()
-        self.width = width
-        self.length = length
+        self.width = width # Must be consistent with pde_config
+        self.length = length # Must be consistent with pde_config
         self.grid_size = width * length
         self.seed = seed
         self.n_sensor = n_sensor
@@ -28,7 +28,7 @@ class SensorOptimalPlacement(gym.Env):
         #internal tracking
         self.state = None  # Will be a (width x length) array of 0/1
         self.sensor_positions = None  # List of (row, col) for each sensor
-        self.pde_field = None #PDE solution field, of shape (n_step, width, length)
+        self.pde_field = None #PDE solution field, of shape (n_step, width, length) # n_step defined in pde_config
 
 
     def reset(self):
@@ -76,7 +76,7 @@ class SensorOptimalPlacement(gym.Env):
         reward = self._compute_reward(self.pde_field, self.state, self.sensor_positions)
 
         #step pde_solver for next step, use the last frame of current pde_field as current state
-        current_state = self.pde_field[-1].q[0]
+        current_state = self.pde_field[-1]
         self.pde_field = self.pde_solver.step(current_state)
 
         #define terminal condition (not sure?)

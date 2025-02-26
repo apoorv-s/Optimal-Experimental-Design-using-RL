@@ -82,12 +82,15 @@ class Advection2D():
         claw.output_format = None
         claw.keep_copy = True
         claw.tfinal = self.t_final
-        claw.num_output_times = self.n_steps
+        claw.num_output_times = self.n_steps - 1
         claw.verbosity = 0
         claw.check_validity()
         claw.run()
         
-        return claw.frames
+        state_array = np.zeros((self.n_steps, self.nx, self.ny))
+        for i, frame in enumerate(claw.frames):
+            state_array[i, :, :] = frame.q[0, :, :]
+        return state_array
         
         
     
