@@ -12,5 +12,6 @@ dependencies:
   - stable-baselines3
   - clawpack
   - pip
+  - scikit-learn
   - pip:
       - stable-baselines3

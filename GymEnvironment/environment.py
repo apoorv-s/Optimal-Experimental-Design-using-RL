@@ -1,6 +1,8 @@
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from sklearn.decomposition import PCA
+from pde.AdvectionEquation import  *
 
 class SensorOptimalPlacement(gym.Env):
     metadata = {"render_modes": [None]} #todo: enable render later
@@ -19,8 +21,14 @@ class SensorOptimalPlacement(gym.Env):
         # an action is a discrete integer
         self.action_space = spaces.Discrete(self.n_sensor * (self.grid_size - self.n_sensor))
 
+        #initiate the pde dynamics
+        self.pde_config = Adv2dModelConfig()
+        self.pde_solver= Advection2D(config=self.pde_config)
+
+        #internal tracking
         self.state = None  # Will be a (width x length) array of 0/1
         self.sensor_positions = None  # List of (row, col) for each sensor
+        self.pde_field = None #PDE solution field, of shape (n_step, width, length)
 
 
     def reset(self):
@@ -36,6 +44,10 @@ class SensorOptimalPlacement(gym.Env):
         # Mark these positions in the state
         for (r, c) in self.sensor_positions:
             self.state[r, c] = 1
+
+        #set initial condition for pde solver
+        pde_initial_cond =  self.pde_solver.initial_condition()
+        self.pde_field = self.pde_solver.step(pde_initial_cond)
 
         return self.state
 
@@ -59,17 +71,32 @@ class SensorOptimalPlacement(gym.Env):
         self.state[new_pos[0], new_pos[1]] = 1
         self.sensor_positions[sensor_index] = tuple(new_pos)
 
-        #call pde to retrieve dynamics
+        #Note that we already update pde_solver in the reset step, so we use self.pde_field to evaluate reward before stepping again
         #compute rewards
-        reward = self._compute_reward()
+        reward = self._compute_reward(self.pde_field, self.state, self.sensor_positions)
+
+        #step pde_solver for next step, use the last frame of current pde_field as current state
+        current_state = self.pde_field[-1].q[0]
+        self.pde_field = self.pde_solver.step(current_state)
 
         #define terminal condition (not sure?)
         done = False
         info = {}
         return self.state, reward, done, info
 
-    def _compute_reward(self):
+    def _compute_reward(self, pde_field, grid_state, sensor_positions):
+        #run KL decomposition, then calculate criteria score
         pass
+
+    def _karhunen_loeve_pca(pde_output, n_components=None):
+        """For discrete dataset/dynamics, KL decomposition is equivalent to PCA"""
+        n_step, x_dim, y_dim = pde_output.shape
+        reshaped_data = pde_output.reshape(n_step, -1)  # Flatten spatial dimensions
+
+        pca = PCA(n_components=n_components)
+        principal_components = pca.fit_transform(reshaped_data)
+
+        return pca.mean_, pca.explained_variance_, pca.components_
 
     def render(self):
         pass
