@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.decomposition import PCA
 
 class RewardCalculator:
     def __init__(self, solution_data):
@@ -29,6 +30,7 @@ class RewardCalculator:
         return self.cov_matrix
 
     def solve_eigenvalue_problem(self):
+        print("change 3 \n")
         """
         Solve the eigenvalue problem for the covariance matrix.
         Returns the eigenvalues and eigenvectors, sorted in descending order.
@@ -72,5 +74,60 @@ class RewardCalculator:
         
         # Compute the information gain measure (determinant of reduced observability Gramian)
         reward = np.linalg.det(selected_sensors_matrix @ selected_sensors_matrix.T)
+        return reward
+        """
+        Pm_phi = self.selected_modes[sensor_indices, :]
+        reward = np.linalg.det(Pm_phi.T @ Pm_phi)
+        return reward
+        """
+    
+    # New PCA-based methods
+    def compute_kld_with_pca(self, energy_threshold=0.99):
+
+        # Reshape data for PCA: (timesteps, nx*ny)
+        X = self.solution_data.reshape(self.nx * self.ny, self.timesteps).T
+        # Fit PCA without specifying number of components initially
+        pca = PCA()
+        pca.fit(X)
+    
+        explained_variance_ratio = pca.explained_variance_ratio_
+        cumulative_variance_ratio = np.cumsum(explained_variance_ratio)
+        n_components = np.searchsorted(cumulative_variance_ratio, energy_threshold) + 1
         
+        # Re-fit PCA with the determined number of components
+        pca = PCA(n_components=n_components)
+        pca.fit(X)
+        
+        # Get eigenvalues and eigenvectors (KL modes)
+        eigenvalues = pca.explained_variance_
+        
+        # PCA components have shape (n_components, nx*ny), but we want (nx*ny, n_components)
+        modes = pca.components_.T
+        
+        # Store the results in the class attributes
+        self.eigenvalues_pca = eigenvalues
+        self.eigenvectors_pca = modes
+        self.selected_modes_pca = modes
+        
+        return modes, eigenvalues, n_components
+    
+    def compute_reward_function_pca(self, sensor_indices):
+        """
+        Compute the reward function using PCA-based KLD modes.
+        """
+        if not hasattr(self, 'selected_modes_pca'):
+            raise ValueError("PCA modes not computed. Call compute_kld_with_pca() first.")
+        
+
+
+        # Extract the rows of the selected PCA modes corresponding to sensor locations
+        selected_sensors_matrix = self.selected_modes_pca[sensor_indices, :]
+        
+        # Compute the information gain measure (determinant of reduced observability Gramian)
+        reward = np.linalg.det(selected_sensors_matrix @ selected_sensors_matrix.T)        
+        """""
+        Pm_phi = self.selected_modes_pca[sensor_indices, :]
+        observability_gramian = Pm_phi.T @ Pm_phi
+        reward = np.linalg.det(observability_gramian)
+        """""
         return reward

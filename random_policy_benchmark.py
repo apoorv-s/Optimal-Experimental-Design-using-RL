@@ -16,6 +16,7 @@ def run_random_policy_benchmark(
 
     all_episode_rewards = []
 
+    """
     for episode_idx in range(num_episodes):
         # Reset environment and get initial observation
         obs = env.reset(seed = episode_idx)
@@ -43,7 +44,30 @@ def run_random_policy_benchmark(
     print(f"Average reward: {avg_reward:.4f}")
     print(f"Reward per episode: {all_episode_rewards}")
 
-    return all_episode_rewards
+    return all_episode_rewards"""
+    best_rewards = []
+    for episode_idx in range(num_episodes):
+        # Reset environment and get initial observation
+        obs = env.reset(seed=episode_idx)
+        episode_rewards = []
+        done = False
+        truncated = False
+        print(f"Starting episode {episode_idx + 1}/{num_episodes}")
+        step = 0
+        while not done and not truncated:
+            action = env.action_space.sample()
+            obs, reward, done, truncated, info = env.step(action)
+            episode_rewards.append(reward)
+            step += 1
+            print(f"  Step {step}, Current reward: {reward:.6f}")
+        best_rewards.append(info["max_reward"])
+        all_episode_rewards.append(episode_rewards)
+        print(f"Episode {episode_idx + 1}/{num_episodes} complete - Max Reward: {info['max_reward']:.6f}")
+    print(f"\nCompleted {num_episodes} episodes using random policy.")
+    print(f"Best reward overall: {max(best_rewards):.6f}")
+    print(f"Average best reward per episode: {np.mean(best_rewards):.6f}")
+
+    return all_episode_rewards, best_rewards
 
 
 if __name__ == "__main__":
