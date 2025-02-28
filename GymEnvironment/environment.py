@@ -89,7 +89,8 @@ class SensorOptimalPlacement(gym.Env):
         self.optimal_state = None
         self.n_episode += 1
 
-        return self.state
+        info = {}
+        return self.state, info
 
     def step(self,action):
         #update the grid with new placement
