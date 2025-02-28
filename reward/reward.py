@@ -86,7 +86,7 @@ class RewardCalculator:
 
         # Reshape data for PCA: (timesteps, nx*ny)
         X = self.solution_data.reshape(self.nx * self.ny, self.timesteps).T
-        # Fit PCA without specifying number of components initially
+        # Fit PCA
         pca = PCA()
         pca.fit(X)
     
@@ -94,19 +94,14 @@ class RewardCalculator:
         cumulative_variance_ratio = np.cumsum(explained_variance_ratio)
         n_components = np.searchsorted(cumulative_variance_ratio, energy_threshold) + 1
         
-        # Re-fit PCA with the determined number of components
-        pca = PCA(n_components=n_components)
-        pca.fit(X)
-        
         # Get eigenvalues and eigenvectors (KL modes)
-        eigenvalues = pca.explained_variance_
+        eigenvalues = pca.explained_variance_[:n_components]
         
         # PCA components have shape (n_components, nx*ny), but we want (nx*ny, n_components)
-        modes = pca.components_.T
+        modes = pca.components_[:n_components].T
         
         # Store the results in the class attributes
         self.eigenvalues_pca = eigenvalues
-        self.eigenvectors_pca = modes
         self.selected_modes_pca = modes
         
         return modes, eigenvalues, n_components
