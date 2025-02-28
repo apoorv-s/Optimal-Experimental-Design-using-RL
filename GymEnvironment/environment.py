@@ -3,10 +3,11 @@ import numpy as np
 from gymnasium import spaces
 from sklearn.decomposition import PCA
 from pde.AdvectionEquation import  *
+from reward.reward import RewardCalculator
 
 class SensorOptimalPlacement(gym.Env):
     metadata = {"render_modes": [None]} #todo: enable render later
-    def __init__(self, width, length, n_sensor, max_horizon, N_max, seed):
+    def __init__(self, width, length, n_sensor, max_horizon, N_max, seed, use_pca = True):
         super().__init__()
         self.width = width # Must be consistent with pde_config
         self.length = length # Must be consistent with pde_config
@@ -25,20 +26,37 @@ class SensorOptimalPlacement(gym.Env):
         self.action_space = spaces.Discrete(self.n_sensor * (self.grid_size - self.n_sensor), seed= self.seed)
 
         #initiate the pde dynamics
-        self.pde_config = Adv2dModelConfig()
-        assert self.pde_config.nx == width, "x-dimension mismatch"
-        assert self.pde_config.ny == length, "y-dimension mismatch"
+        pde_config = Adv2dModelConfig()
+        assert pde_config.nx == width, "x-dimension mismatch"
+        assert pde_config.ny == length, "y-dimension mismatch"
 
-        self.pde_solver= Advection2D(config=self.pde_config)
+
+        # simulate the dynamics (only once at init of environment)
+        pde_solver = Advection2D(config=pde_config)
+        pde_initial_cond = pde_solver.initial_condition()
+        pde_field = pde_solver.step(pde_initial_cond)
+        # Rearranged pde_field to make it work with RewardCalculator
+        solution_data = np.transpose(pde_field, (1, 2, 0))
+        self.reward_calculator = RewardCalculator(solution_data)
+        # Pre-compute with KLD or PCA
+        if self.use_pca:
+            self.reward_calculator.compute_kld_with_pca(energy_threshold=0.99)
+        else:
+            # Use original KLD approach
+            self.reward_calculator.compute_covariance_matrix()
+            eigenvalues, _ = self.reward_calculator.solve_eigenvalue_problem()
+            cumulative_energy = np.cumsum(eigenvalues) / np.sum(eigenvalues)
+            num_modes = np.searchsorted(cumulative_energy, 0.99) + 1
+            self.reward_calculator.select_KLD_modes(num_modes)
 
         #internal tracking
         self.state = None  # Will be a (width x length) array of 0/1
         self.sensor_positions = None  # List of (row, col) for each sensor
-        self.pde_field = None #PDE solution field, of shape (n_step, width, length) # n_step defined in pde_config
         self.max_reward = -np.inf
         self.N = 0 #number of steps since reward last improved
         self.optimal_state = None
         self.t = 0 #time step in current episode
+        self.n_episode = 0
 
     def reset(self, seed = None, options = None):
         """initiate new episode by randomly placing n_sensor sensors on the grid"""
@@ -56,15 +74,13 @@ class SensorOptimalPlacement(gym.Env):
         for (r, c) in self.sensor_positions:
             self.state[r, c] = 1
 
-        #simulate the dynamics (only once at the beginning of the new episode)
-        pde_initial_cond =  self.pde_solver.initial_condition()
-        self.pde_field = self.pde_solver.step(pde_initial_cond)
 
         #reset tracking state
         self.N = 0
         self.t = 0
         self.max_reward = -np.inf
         self.optimal_state = None
+        self.n_episode += 1
 
         return self.state
 
@@ -90,7 +106,7 @@ class SensorOptimalPlacement(gym.Env):
 
         #Note that we already update pde_solver in the reset step, so we use self.pde_field to evaluate reward before stepping again
         #compute rewards
-        reward = self._compute_reward(self.pde_field, self.state, self.sensor_positions)
+        reward = self._compute_reward()
 
         #update max reward
         if reward > self.max_reward:
@@ -112,19 +128,20 @@ class SensorOptimalPlacement(gym.Env):
 
         return self.state, reward, done, False, info
 
-    def _compute_reward(self, pde_field, grid_state, sensor_positions):
-        #run KL decomposition, then calculate criteria score
-        pass
+    def _compute_reward(self):
+        """Compute reward for current sensor configuration using pre-computed KLD/PCA modes"""
+        if self.reward_calculator is None:
+            raise ValueError("Reward calculator not initialized. Call reset() first.")
 
-    def _karhunen_loeve_pca(pde_output, n_components=None):
-        """For discrete dataset/dynamics, KL decomposition is equivalent to PCA"""
-        n_step, x_dim, y_dim = pde_output.shape
-        reshaped_data = pde_output.reshape(n_step, -1)  # Flatten spatial dimensions
+        flat_indices = [r * self.length + c for r, c in self.sensor_positions]
 
-        pca = PCA(n_components=n_components)
-        principal_components = pca.fit_transform(reshaped_data)
+        # The final reward using the precomputed modes (PCA or KLD)
+        if self.use_pca:
+            reward = self.reward_calculator.compute_reward_function_pca(flat_indices)
+        else:
+            reward = self.reward_calculator.compute_reward_function(flat_indices)
 
-        return pca.mean_, pca.explained_variance_, pca.components_
+        return np.log(reward) if reward > 0 else -float('inf')
 
     def render(self):
         pass

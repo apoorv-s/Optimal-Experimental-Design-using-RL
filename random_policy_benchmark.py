@@ -1,5 +1,5 @@
 import numpy as np
-from GymEnvironment.environment2 import SensorOptimalPlacement
+from GymEnvironment.environment import SensorOptimalPlacement
 
 
 def run_random_policy_benchmark(
