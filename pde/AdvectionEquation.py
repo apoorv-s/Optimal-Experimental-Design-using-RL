@@ -14,7 +14,7 @@ class Adv2dModelConfig():
         self.y_domain = [0.0, 1.0]
 
         self.t_final = 2.0
-        self.n_steps = 20
+        self.n_steps = 21
 
         # Pyclaw specific configs
         self.dimensional_split = 1
@@ -34,6 +34,8 @@ class Advection2D():
         
         self.t_final = config.t_final
         self.n_steps = config.n_steps
+        
+        self.t_steps = np.linspace(0, self.t_final, self.n_steps)
         
         self.x = pyclaw.Dimension(self.x_domain[0], self.x_domain[1], self.nx, name='x')
         self.y = pyclaw.Dimension(self.y_domain[0], self.y_domain[1], self.ny, name='y')

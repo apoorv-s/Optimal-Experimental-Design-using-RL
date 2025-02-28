@@ -11,7 +11,7 @@ class Burgers2DConfig():
         self.y_domain = [0.0, 1.0]
 
         self.t_final = 2.0
-        self.n_steps = 20
+        self.n_steps = 21
 
         # Pyclaw specific configs
         self.dimensional_split = False
@@ -25,6 +25,8 @@ class Burgers2D():
         self.ny = config.ny
         self.t_final = config.t_final
         self.n_steps = config.n_steps
+        
+        self.t_steps = np.linspace(0, self.t_final, self.n_steps)
         
         self.dimensional_split = config.dimensional_split
         self.transverse_waves = config.transverse_waves
@@ -72,6 +74,7 @@ class Burgers2D():
         claw.solver = solver
         claw.keep_copy = True
         claw.output_format = None
+        claw.verbosity = 0
         claw.run()
         
         state_array = np.zeros((self.n_steps, self.nx, self.ny))
