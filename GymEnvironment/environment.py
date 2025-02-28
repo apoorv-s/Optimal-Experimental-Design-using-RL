@@ -5,6 +5,21 @@ from sklearn.decomposition import PCA
 from pde.AdvectionEquation import  *
 from reward.reward import RewardCalculator
 
+
+class CustomMultiBinary(spaces.MultiBinary):
+    def __init__(self, shape, n_sensor, seed=None):
+        super().__init__(shape, seed=seed)
+        self.n_sensor = n_sensor
+
+    def sample(self):
+        # Create a flat grid of zeros.
+        flat_grid = np.zeros(np.prod(self.shape), dtype=int)
+        # Randomly choose indices to set to 1 (exactly n_sensor ones).
+        ones_indices = self.np_random.choice(np.prod(self.shape), self.n_sensor, replace=False)
+        flat_grid[ones_indices] = 1
+        # Reshape back to the grid shape.
+        return flat_grid.reshape(self.shape)
+
 class SensorOptimalPlacement(gym.Env):
     metadata = {"render_modes": [None]} #todo: enable render later
     def __init__(self, width, length, n_sensor, max_horizon, N_max, seed, use_pca = True):
@@ -17,9 +32,10 @@ class SensorOptimalPlacement(gym.Env):
         self.n_sensor = n_sensor
         self.max_horizon = max_horizon #max horizon by which an epsisode will be terminated
         self.N_max = N_max #max iteration of nonincreasing reward that an episode will be terminated
+        self.use_pca = use_pca
         #define observation space
-        #observation space is a grid with 1 and 0 depicting positions of sensors
-        self.observation_space = spaces.MultiBinary((self.width, self.length), seed = self.seed)
+        #observation space is a grid of 1 and 0 with exactly n_sensor 1s, depicting positions of sensors
+        self.observation_space = CustomMultiBinary((self.width, self.length), n_sensor=self.n_sensor, seed=self.seed)
         # define action space
         # fof action, at each step, we choose a sensor and move to a new available positions => num_actions  = n_sensor * (width * length - n_sensor)
         # an action is a discrete integer
@@ -62,18 +78,9 @@ class SensorOptimalPlacement(gym.Env):
         """initiate new episode by randomly placing n_sensor sensors on the grid"""
 
         super().reset(seed = seed)
-        # Create an empty grid
-        self.state = np.zeros((self.width, self.length), dtype=int)
-        # Choose n_sensor unique cells to place sensors
-        flat_indices = np.random.choice(self.grid_size, self.n_sensor, replace=False)
-
-        # Convert flat indices (0..width*length-1) to 2D (row, col)
-        self.sensor_positions = [divmod(idx, self.length) for idx in flat_indices]
-
-        # Mark these positions in the state
-        for (r, c) in self.sensor_positions:
-            self.state[r, c] = 1
-
+        # re-init state and sensor positions
+        self.state = self.observation_space.sample()
+        self.sensor_positions = [tuple(pos) for pos in np.argwhere(self.state == 1)]
 
         #reset tracking state
         self.N = 0
