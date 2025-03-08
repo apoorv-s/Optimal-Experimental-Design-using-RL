@@ -162,3 +162,5 @@ cython_debug/
 .DS_Store
 _output/
 *.pdf
+*.zip
+tensorboard/

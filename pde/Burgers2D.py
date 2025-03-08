@@ -39,15 +39,16 @@ class Burgers2D():
         
         self.domain = pyclaw.Domain([self.x, self.y])
         
-        
-    def initial_condition(self, X, Y):
+    def initial_condition(self):
+        state = pyclaw.State(self.domain, 1)
+        X, Y = state.grid.p_centers
         sigma_x = 0.3
         sigma_y = 0.3
         x0 = 0.5
         y0 = 0.5
         return np.exp(-(((X - x0) ** 2) / (2 * sigma_x ** 2) + ((Y - y0) ** 2) / (2 * sigma_y ** 2))) 
         
-    def solve(self):
+    def step(self, current_state):
         ## Solver setup
         solver = pyclaw.ClawSolver2D(riemann.burgers_2D)
         solver.dimensional_split = self.dimensional_split
@@ -65,7 +66,7 @@ class Burgers2D():
 
         # Initial data
         X, Y = state.grid.p_centers
-        state.q[0,:,:] = self.initial_condition(X, Y)
+        state.q[0,:,:] = current_state
 
         claw = pyclaw.Controller()
         claw.tfinal = self.t_final

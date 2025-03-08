@@ -17,7 +17,7 @@ if __name__ == "__main__":
                                  seed=seed)
 
     #DQN has a bunch of hyperparameter to be tuned, check: https://stable-baselines3.readthedocs.io/en/master/modules/dqn.html
-    model = DQN("MlpPolicy", env, verbose=1, tensorboard_log= "./tensorboard/")
+    model = DQN("MlpPolicy", env, verbose=1, tensorboard_log= "./tensorboard/", policy_kwargs=dict(net_arch=[64, 64]))
     model.learn(total_timesteps=50000
                 , log_interval=10)
     #to use tensorboard first do "conda install tensorboard"

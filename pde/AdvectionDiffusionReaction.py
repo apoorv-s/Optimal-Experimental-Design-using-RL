@@ -10,13 +10,16 @@ class ADRConfig():
         self.y_domain = [0.0, 1.0]
         
         self.t_final = 2.0
-        self.delta_t = 0.01
+        self.delta_t = 0.1
         self.n_steps = int(self.t_final / self.delta_t)
         self.t_steps = np.arange(0, self.t_final + self.delta_t, self.delta_t)
         
-        self.diff_coeff = 0.05
-        self.adv_coeff = (0.2, 0.1)
-        self.react_coeff = 0.1
+        self.diff_coeff = 0.02
+        self.adv_coeff = (0.4, 0.4)
+        self.react_coeff = 0.02
+        
+        self.x0 = 0.25
+        self.y0 = 0.25
         
         
         
@@ -38,27 +41,32 @@ class ADR():
         self.delta_t = config.delta_t
         self.t_steps = config.t_steps
         
+        self.x0 = config.x0
+        self.y0 = config.y0
+        
         self.mesh = fp.Grid2D(dx=self.dx, dy=self.dy, nx=self.nx, ny=self.ny)
         
-        X, Y = self.mesh.cellCenters
-        self.X_grid = X.reshape((self.nx, self.ny))
-        self.Y_grid = Y.reshape((self.nx, self.ny))
+        self.X, self.Y = self.mesh.cellCenters
+        self.X_grid = self.X.reshape((self.nx, self.ny))
+        self.Y_grid = self.Y.reshape((self.nx, self.ny))
         
         self.diff_coeff = config.diff_coeff
         self.adv_coeff = config.adv_coeff
         self.react_coeff = config.react_coeff
         
     
-    def solve(self):
+    def step(self, current_state):
         u = fp.CellVariable(name="concentration", mesh=self.mesh, value=0.0)
         
         eq = fp.TransientTerm() + fp.ConvectionTerm(self.adv_coeff) - fp.DiffusionTerm(self.diff_coeff) - self.react_coeff * u
         
         X, Y = self.mesh.cellCenters
-        u.setValue(np.exp(-((X - 0.2) ** 2 + (Y - 0.1) ** 2) / 0.02))
+        u.setValue(current_state)
+        
+        u.faceGrad.constrain(0, where=self.mesh.exteriorFaces)
         
         results = np.zeros((self.n_steps + 1, self.nx, self.ny))
-        results[0] = u.value
+        results[0] = u.value.reshape((self.nx, self.ny)).copy()
         for step in range(self.n_steps):
             eq.solve(var=u, dt=self.delta_t)
             results[step + 1] = u.value.reshape((self.nx, self.ny)).copy()
@@ -66,4 +74,5 @@ class ADR():
         return results
     
     def initial_condition(self):
-        pass
+        # Unlike the Pyclaw examples, this returns a vector instead of a 2D array
+        return np.exp(-((self.X - self.x0) ** 2 + (self.Y - self.y0) ** 2) / 0.02)
