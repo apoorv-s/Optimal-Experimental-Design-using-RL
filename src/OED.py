@@ -45,17 +45,18 @@ class OED(gym.Env):
         self.n_max = gym_config.n_max
         self.use_pca = gym_config.use_pca
         self.with_replacement_oed = gym_config.with_replacement_oed
-        
+
         # TODO: Does using the same seed for the observation space and action space make sense? Is there a reason?
         self.observation_space = CustomMultiBinary((self.width, self.length),
                                               n_sensor=self.n_sensors, seed=self.seed)
-        
-        # TODO: Should we change it to be n_sensor * grid_size, multiple sensors can converge to the same position! That's okay, might inform the number of sensors needed
+
         if self.with_replacement_oed:
-            self.action_space = spaces.Discrete(self.n_sensors * self.grid_size, seed=self.seed)
+            # Action space: for each sensor, 5 possible moves
+            self.action_space = spaces.Discrete(5 * self.n_sensors, seed=self.seed)
         else:
-            self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors), seed=self.seed)
-        
+            # Action space: for each sensor, 4 possible moves
+            self.action_space = spaces.Discrete(4 * self.n_sensors, seed=self.seed)
+
         self.pde_field = self.pde_system.step(self.pde_system.initial_condition())
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
         self.reward_calculator = RewardCalculator(self.pde_field)
@@ -90,25 +91,48 @@ class OED(gym.Env):
     
     def step(self, action):
         if self.with_replacement_oed:
-            sensor_idx = action // self.grid_size
-            spot_idx = action % self.grid_size
-            
-            new_pos = (spot_idx // self.length, spot_idx % self.length)
-            old_pos = self.sensor_positions[sensor_idx]
-            
+            # Decode which sensor and which direction
+            sensor_idx = action // 5
+            move_idx = action % 5
+
+            # Directions: up, right, down, left
+            # up    = (row - 1, col)
+            # right = (row, col + 1)
+            # down  = (row + 1, col)
+            # left  = (row, col - 1)
+            # stand-by = (row + 0, col + 0)
+            directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (0,0)]
+
         else:
-            empty_spots = self.grid_size - self.n_sensors
-            sensor_idx = action // empty_spots
-            spot_idx = action % empty_spots
-            
-            empty_pos = np.argwhere(self.state == 0)
-            new_pos = empty_pos[spot_idx]
-            old_pos = self.sensor_positions[sensor_idx]
-            
-        self.state[old_pos[0], old_pos[1]] = 0
-        self.state[new_pos[0], new_pos[1]] = 1
-        self.sensor_positions[sensor_idx] = tuple(new_pos)
-        
+            # Decode which sensor and which direction
+            sensor_idx = action // 4
+            move_idx = action % 4
+
+            # Directions: up, right, down, left
+            # up    = (row - 1, col)
+            # right = (row, col + 1)
+            # down  = (row + 1, col)
+            # left  = (row, col - 1)
+            directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+
+        move = directions[move_idx]
+        old_pos = self.sensor_positions[sensor_idx]
+        new_pos = (old_pos[0] + move[0], old_pos[1] + move[1])
+
+        # Check boundary, ignore the action if out of grid bound
+        if (0 <= new_pos[0] < self.width) and (0 <= new_pos[1] < self.length):
+            #if the new cell is already occupied, do nothing, or penalize?
+            if self.state[new_pos[0], new_pos[1]] == 1:
+                pass
+            else:
+                # Valid, unoccupied move -> update
+                self.state[old_pos[0], old_pos[1]] = 0
+                self.state[new_pos[0], new_pos[1]] = 1
+                self.sensor_positions[sensor_idx] = new_pos
+        else:
+            # Out of bounds – do nothing, or penalize?
+            pass
+
         reward = self.compute_reward()
         
         if reward > self.max_reward:
@@ -119,10 +143,7 @@ class OED(gym.Env):
             self.N += 1
             
         self.t += 1
-        if (self.N > self.n_max) or (self.t > self.max_horizon):
-            done = True
-        else:
-            done = False
+        done = (self.N > self.n_max) or (self.t > self.max_horizon)
 
         info = {"optimal_state": self.optimal_state,
                 "max_reward": self.max_reward}
