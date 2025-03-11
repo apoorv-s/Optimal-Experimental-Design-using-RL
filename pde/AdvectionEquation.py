@@ -7,8 +7,8 @@ class Adv2dModelConfig():
         self.ny = 50
         self.num_eqn = 1
 
-        self.x_velocity = 0.5
-        self.y_velocity = 1.0
+        self.x_velocity = 0.1
+        self.y_velocity = 0.3
 
         self.x_domain = [0.0, 1.0]
         self.y_domain = [0.0, 1.0]
@@ -102,4 +102,4 @@ class Advection2D():
         q = 1.0  if  0.1 < x < 0.6   and   0.1 < y < 0.6
             0.1  otherwise
         """
-        return 0.9*(0.1<self.X)*(self.X<0.6)*(0.1<self.Y)*(self.Y<0.6) + 0.1
+        return 0.9*(0.2<self.X)*(self.X<0.4)*(0.1<self.Y)*(self.Y<0.2) + 0.1

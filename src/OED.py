@@ -86,7 +86,9 @@ class OED(gym.Env):
         self.max_reward = -np.inf
         self.optimal_state = None
         self.n_episode += 1
-        info = {}        
+        info = {}
+        self.t = 0
+        self.N = 0
         return self.state, info
     
     def step(self, action):

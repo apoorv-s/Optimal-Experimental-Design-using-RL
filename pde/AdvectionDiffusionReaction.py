@@ -14,13 +14,12 @@ class ADRConfig():
         self.n_steps = int(self.t_final / self.delta_t)
         self.t_steps = np.arange(0, self.t_final + self.delta_t, self.delta_t)
         
-        self.diff_coeff = 0.02
-        self.adv_coeff = (0.4, 0.4)
-        self.react_coeff = 0.02
+        self.diff_coeff = 0.0
+        self.adv_coeff = (0.2, 0.2)
+        self.react_coeff = 0.0
         
         self.x0 = 0.25
         self.y0 = 0.25
-        
         
         
     
@@ -75,4 +74,4 @@ class ADR():
     
     def initial_condition(self):
         # Unlike the Pyclaw examples, this returns a vector instead of a 2D array
-        return np.exp(-((self.X - self.x0) ** 2 + (self.Y - self.y0) ** 2) / 0.02)
+        return 5*np.exp(-((self.X - self.x0) ** 2 + (self.Y - self.y0) ** 2) / 0.02)
