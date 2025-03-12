@@ -12,7 +12,7 @@ class OEDGymConfig():
         self.max_horizon = 500
         # self.use_pca = True
         self.with_replacement_oed = True
-        self.n_components_rewards = 10
+        self.n_components_rewards = None
 
 
 class CustomMultiBinary(spaces.MultiBinary):
@@ -63,7 +63,7 @@ class OED(gym.Env):
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
         
         # Rewards Computation
-        self.solution_data = self.pde_field.reshape(-1, self.pde_field.shape[-1])
+        self.solution_data = self.pde_field.reshape(-1, self.pde_field.shape[-1]).T
         self.pca = PCA(n_components=gym_config.n_components_rewards)
         self.pca.fit(self.solution_data)
         self.modes = self.pca.components_.T
@@ -174,7 +174,7 @@ class OED(gym.Env):
     #     return np.log(reward) if reward > 0 else -float('inf')
     
     def compute_reward(self):
-        print(self.sensor_positions)
+        # print(self.sensor_positions)
         sensor_idx = [r * self.ny + c for r, c in self.sensor_positions]
         Q_m = self.modes[sensor_idx, :]
         # T_m = Q_m.T @ Q_m # Symmetric matrix
