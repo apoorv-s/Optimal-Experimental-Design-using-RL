@@ -7,14 +7,14 @@ class Adv2dModelConfig():
         self.ny = 50
         self.num_eqn = 1
 
-        self.x_velocity = 0.1
-        self.y_velocity = 0.3
+        self.x_velocity = 0.4
+        self.y_velocity = -0.3
 
         self.x_domain = [0.0, 1.0]
         self.y_domain = [0.0, 1.0]
 
-        self.t_final = 2.0
-        self.n_steps = 21
+        self.t_final = 0.5
+        self.n_steps = 2500
 
         # Pyclaw specific configs
         self.dimensional_split = 1
@@ -54,10 +54,10 @@ class Advection2D():
         solver.transverse_waves = self.transverse_waves
         solver.limiters = pyclaw.limiters.tvd.vanleer
         
-        solver.bc_lower[0] = pyclaw.BC.periodic
-        solver.bc_upper[0] = pyclaw.BC.periodic
-        solver.bc_lower[1] = pyclaw.BC.periodic
-        solver.bc_upper[1] = pyclaw.BC.periodic
+        solver.bc_lower[0] = pyclaw.BC.extrap
+        solver.bc_upper[0] = pyclaw.BC.extrap
+        solver.bc_lower[1] = pyclaw.BC.extrap
+        solver.bc_upper[1] = pyclaw.BC.extrap
         
         # Assumes classic solver, NOT sharpclaw
         if not self.dimensional_split and not self.transverse_waves:
@@ -94,12 +94,29 @@ class Advection2D():
             state_array[i, :, :] = frame.q[0, :, :]
         return state_array
         
-        
-    
     def initial_condition(self):
         """Set initial condition for q.
-        Sample scalar equation with data that is piecewise constant with
-        q = 1.0  if  0.1 < x < 0.6   and   0.1 < y < 0.6
-            0.1  otherwise
+        A sum of smooth varying sinusoidals multiplied with a smooth function.
+        Creates a complex wave pattern with smooth transitions.
         """
-        return 0.9*(0.2<self.X)*(self.X<0.4)*(0.1<self.Y)*(self.Y<0.2) + 0.1
+        # Create smooth envelope function (Gaussian-like)
+        envelope =1.0/(1.0 + np.exp(-5.0*(0.15 - np.sqrt((self.X-0.5)**2 + (self.Y-0.5)**2))))
+        
+        # Create sum of sinusoidals with different frequencies
+        wave1 = np.sin(8*np.pi*self.X) * np.cos(6*np.pi*self.Y)
+        wave2 = np.sin(5*np.pi*(self.X+self.Y)) * np.cos(4*np.pi*(self.X-self.Y))
+        wave3 = np.sin(10*np.pi*self.X**2) * np.sin(10*np.pi*self.Y**2)
+        
+        # Combine waves with smooth transitions
+        waves = 1*wave1 + 1*wave2 + 1*wave3
+        
+        # Multiply by envelope function for smooth boundary conditions
+        return 0.8 * envelope
+    
+    # def initial_condition(self):
+    #     """Set initial condition for q.
+    #     Sample scalar equation with data that is piecewise constant with
+    #     q = 1.0  if  0.1 < x < 0.6   and   0.1 < y < 0.6
+    #         0.1  otherwise
+    #     """
+    #     return 0.9*(0.2<self.X)*(self.X<0.4)*(0.1<self.Y)*(self.Y<0.2) + 0.1

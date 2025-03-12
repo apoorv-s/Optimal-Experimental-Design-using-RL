@@ -1,7 +1,8 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-from reward.reward import RewardCalculator
+# from reward.reward import RewardCalculator
+from sklearn.decomposition import PCA
 
 
 class OEDGymConfig():
@@ -9,8 +10,9 @@ class OEDGymConfig():
         self.n_sensor = 5
         self.n_max = 10
         self.max_horizon = 500
-        self.use_pca = True
+        # self.use_pca = True
         self.with_replacement_oed = True
+        self.n_components_rewards = 10
 
 
 class CustomMultiBinary(spaces.MultiBinary):
@@ -36,18 +38,18 @@ class OED(gym.Env):
         np.random.seed(seed)
         
         self.pde_system = pde_system
-        self.width = pde_system.nx
-        self.length = pde_system.ny
-        self.grid_size = self.width * self.length
+        self.nx = pde_system.nx
+        self.ny = pde_system.ny
+        self.grid_size = self.nx * self.ny
         
         self.n_sensors = gym_config.n_sensor
         self.max_horizon = gym_config.max_horizon
         self.n_max = gym_config.n_max
-        self.use_pca = gym_config.use_pca
+        # self.use_pca = gym_config.use_pca
         self.with_replacement_oed = gym_config.with_replacement_oed
 
         # TODO: Does using the same seed for the observation space and action space make sense? Is there a reason?
-        self.observation_space = CustomMultiBinary((self.width, self.length),
+        self.observation_space = CustomMultiBinary((self.nx, self.ny),
                                               n_sensor=self.n_sensors, seed=self.seed)
 
         if self.with_replacement_oed:
@@ -59,19 +61,26 @@ class OED(gym.Env):
 
         self.pde_field = self.pde_system.step(self.pde_system.initial_condition())
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
-        self.reward_calculator = RewardCalculator(self.pde_field)
         
-        if self.use_pca:
-            self.reward_calculator.compute_kld_with_pca(energy_threshold=0.99)
-        else:
-            self.reward_calculator.compute_covariance_matrix()
-            eigenvalues, _ = self.reward_calculator.solve_eigenvalue_problem()
-            cumulative_energy = np.cumsum(eigenvalues) / np.sum(eigenvalues)
-            num_modes = np.searchsorted(cumulative_energy, 0.99) + 1
-            self.reward_calculator.select_KLD_modes(num_modes)
+        # Rewards Computation
+        self.solution_data = self.pde_field.reshape(-1, self.pde_field.shape[-1])
+        self.pca = PCA(n_components=gym_config.n_components_rewards)
+        self.pca.fit(self.solution_data)
+        self.modes = self.pca.components_.T
+        
+        # self.reward_calculator = RewardCalculator(self.pde_field)
+        
+        # if self.use_pca:
+        #     self.reward_calculator.compute_kld_with_pca(energy_threshold=0.99)
+        # else:
+        #     self.reward_calculator.compute_covariance_matrix()
+        #     eigenvalues, _ = self.reward_calculator.solve_eigenvalue_problem()
+        #     cumulative_energy = np.cumsum(eigenvalues) / np.sum(eigenvalues)
+        #     num_modes = np.searchsorted(cumulative_energy, 0.99) + 1
+        #     self.reward_calculator.select_KLD_modes(num_modes)
             
             
-        self.state = None  # Sensor position in width x length grid with n_sensors 1s
+        self.state = None  # Sensor position in nx x ny grid with n_sensors 1s
         self.sensor_positions = None  # List of sensor positions (row_i, col_i)_{i=1:n_sensors}
         self.max_reward = -np.inf
         self.N = 0 # number of steps since reward last improved
@@ -122,7 +131,7 @@ class OED(gym.Env):
         new_pos = (old_pos[0] + move[0], old_pos[1] + move[1])
 
         # Check boundary, ignore the action if out of grid bound
-        if (0 <= new_pos[0] < self.width) and (0 <= new_pos[1] < self.length):
+        if (0 <= new_pos[0] < self.nx) and (0 <= new_pos[1] < self.ny):
             #if the new cell is already occupied, do nothing, or penalize?
             if self.state[new_pos[0], new_pos[1]] == 1:
                 pass
@@ -152,16 +161,24 @@ class OED(gym.Env):
 
         return self.state, reward, done, False, info
         
-    def compute_reward(self):
-        if self.reward_calculator is None:
-            raise ValueError("Reward calculator not initialized.")
-        flat_indices = [r * self.length + c for r, c in self.sensor_positions]
+    # def compute_reward(self):
+    #     if self.reward_calculator is None:
+    #         raise ValueError("Reward calculator not initialized.")
+    #     flat_indices = [r * self.ny + c for r, c in self.sensor_positions]
         
-        if self.use_pca:
-            reward = self.reward_calculator.compute_reward_function_pca(flat_indices)
-        else:
-            reward = self.reward_calculator.compute_reward_function(flat_indices)
+    #     if self.use_pca:
+    #         reward = self.reward_calculator.compute_reward_function_pca(flat_indices)
+    #     else:
+    #         reward = self.reward_calculator.compute_reward_function(flat_indices)
 
+    #     return np.log(reward) if reward > 0 else -float('inf')
+    
+    def compute_reward(self):
+        print(self.sensor_positions)
+        sensor_idx = [r * self.ny + c for r, c in self.sensor_positions]
+        Q_m = self.modes[sensor_idx, :]
+        # T_m = Q_m.T @ Q_m # Symmetric matrix
+        reward = np.linalg.det(Q_m.T @ Q_m)
         return np.log(reward) if reward > 0 else -float('inf')
     
     def render(self):
