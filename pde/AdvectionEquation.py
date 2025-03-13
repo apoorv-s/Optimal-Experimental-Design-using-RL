@@ -7,14 +7,14 @@ class Adv2dModelConfig():
         self.ny = 50
         self.num_eqn = 1
 
-        self.x_velocity = 0.4
-        self.y_velocity = -0.3
+        self.x_velocity = 0.2
+        self.y_velocity = -0.1
 
         self.x_domain = [0.0, 1.0]
         self.y_domain = [0.0, 1.0]
 
-        self.t_final = 0.5
-        self.n_steps = 2500
+        self.t_final = 2
+        self.n_steps = 2000
 
         # Pyclaw specific configs
         self.dimensional_split = 1
@@ -111,7 +111,7 @@ class Advection2D():
         waves = 1*wave1 + 1*wave2 + 1*wave3
         
         # Multiply by envelope function for smooth boundary conditions
-        return 0.8 * envelope
+        return 200 * envelope
     
     # def initial_condition(self):
     #     """Set initial condition for q.

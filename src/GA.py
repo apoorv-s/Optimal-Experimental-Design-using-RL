@@ -16,8 +16,8 @@ class GA_OED():
         self.env = OED(seed, pde_system, gym_config)
         self.n_sensor = gym_config.n_sensor
         self.grid_size = self.env.grid_size
-        self.n1 = self.env.width
-        self.n2 = self.env.length
+        self.nx = self.env.nx
+        self.ny = self.env.ny
         
         self.population_size = ga_config.population_size
         self.generations = ga_config.generations
@@ -34,7 +34,7 @@ class GA_OED():
         self.toolbox = base.Toolbox()
         
         # Define gene initialization function to create binary string
-        # Length is n1*n2 where 1s represent sensor positions
+        # Length is nx*ny where 1s represent sensor positions
         def create_individual():
             # Create a binary string with exactly num_sensors 1s
             individual = [0] * (self.grid_size)
@@ -66,8 +66,8 @@ class GA_OED():
         crossover_point = random.randint(1, self.n_sensor - 1)
         
         # Create children
-        child1 = [0] * (self.n1 * self.n2)
-        child2 = [0] * (self.n1 * self.n2)
+        child1 = [0] * (self.nx * self.ny)
+        child2 = [0] * (self.nx * self.ny)
         
         # First part from parent 1, second part from parent 2
         for idx in ones_ind1[:crossover_point] + ones_ind2[crossover_point:]:
@@ -137,21 +137,22 @@ class GA_OED():
         sensor_positions = []
         for i, val in enumerate(individual):
             if val == 1:
-                row = i // self.n2
-                col = i % self.n2
+                row = i // self.ny
+                col = i % self.ny
                 sensor_positions.append((row, col))
         
                 
-        if self.env.reward_calculator is None:
-            raise ValueError("Reward calculator not initialized.")
-        flat_indices = [r * self.env.length + c for r, c in sensor_positions]
+        # if self.env.reward_calculator is None:
+        #     raise ValueError("Reward calculator not initialized.")
+        # flat_indices = [r * self.env.length + c for r, c in sensor_positions]
         
-        if self.env.use_pca:
-            reward = self.env.reward_calculator.compute_reward_function_pca(flat_indices)
-        else:
-            reward = self.env.reward_calculator.compute_reward_function(flat_indices)
-
-        reward = np.log(reward) if reward > 0 else -float('inf')
+        # if self.env.use_pca:
+        #     reward = self.env.reward_calculator.compute_reward_function_pca(flat_indices)
+        # else:
+        #     reward = self.env.reward_calculator.compute_reward_function(flat_indices)
+        
+        self.env.sensor_positions = sensor_positions
+        reward = self.env.compute_reward()
         return reward,
     
     def run(self):
@@ -188,66 +189,10 @@ class GA_OED():
         sensor_positions = []
         for i, val in enumerate(best_individual):
             if val == 1:
-                row = i // self.n2
-                col = i % self.n2
+                row = i // self.ny
+                col = i % self.ny
                 sensor_positions.append((row, col))
         
         return best_individual, best_fitness, sensor_positions, logbook
-    
-    def visualize_solution(self, sensor_positions):
-        """Visualize the sensor placement and coverage."""
-        plt.figure(figsize=(10, 8))
-        
-        # Create a grid
-        grid = np.zeros(self.grid_size)
-        
-        # Mark sensor positions
-        for row, col in sensor_positions:
-            grid[row, col] = 2  # Sensors will be marked with 2
-        
-        # Mark coverage
-        for row in range(self.n1):
-            for col in range(self.n2):
-                # Skip if this cell already has a sensor
-                if grid[row, col] == 2:
-                    continue
-                    
-                # Check if this cell is covered by any sensor
-                for s_row, s_col in sensor_positions:
-                    distance = np.sqrt((row - s_row)**2 + (col - s_col)**2)
-                    if distance <= self.coverage_radius:
-                        grid[row, col] = 1  # Covered cells will be marked with 1
-                        break
-        
-        # Create custom colormap: 0=white (uncovered), 1=light blue (covered), 2=red (sensor)
-        from matplotlib.colors import ListedColormap
-        cmap = ListedColormap(['white', 'lightblue', 'red'])
-        
-        # Plot the grid
-        plt.imshow(grid, cmap=cmap, vmin=0, vmax=2)
-        
-        # Add grid lines
-        plt.grid(which='major', axis='both', linestyle='-', color='k', linewidth=1)
-        plt.xticks(np.arange(-0.5, self.n2, 1), [])
-        plt.yticks(np.arange(-0.5, self.n1, 1), [])
-        
-        # Add numbers to mark sensor positions
-        for i, (row, col) in enumerate(sensor_positions):
-            plt.text(col, row, str(i+1), color='white', ha='center', va='center', fontweight='bold')
-        
-        # Add labels and title
-        plt.title(f'Sensor Placement (Coverage Radius: {self.coverage_radius})')
-        
-        # Add a legend
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Patch(facecolor='white', edgecolor='k', label='Uncovered'),
-            Patch(facecolor='lightblue', edgecolor='k', label='Covered'),
-            Patch(facecolor='red', edgecolor='k', label='Sensor')
-        ]
-        plt.legend(handles=legend_elements, loc='upper right')
-        
-        plt.tight_layout()
-        plt.show()
         
         

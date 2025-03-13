@@ -4,14 +4,14 @@ from clawpack import riemann, pyclaw
 
 class Burgers2DConfig():
     def __init__(self):
-        self.nx = 100
-        self.ny = 100
+        self.nx = 50
+        self.ny = 50
 
         self.x_domain = [0.0, 1.0]
         self.y_domain = [0.0, 1.0]
 
-        self.t_final = 2.0
-        self.n_steps = 21
+        self.t_final = 1.0
+        self.n_steps = 5000
 
         # Pyclaw specific configs
         self.dimensional_split = False

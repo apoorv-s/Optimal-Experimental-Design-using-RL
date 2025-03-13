@@ -8,11 +8,12 @@ from sklearn.decomposition import PCA
 class OEDGymConfig():
     def __init__(self):
         self.n_sensor = 5
-        self.n_max = 10
+        self.n_max = 500
         self.max_horizon = 500
         # self.use_pca = True
         self.with_replacement_oed = True
-        self.n_components_rewards = None
+        self.n_components_rewards = 0.99
+        self.old_action_space = False
 
 
 class CustomMultiBinary(spaces.MultiBinary):
@@ -47,17 +48,23 @@ class OED(gym.Env):
         self.n_max = gym_config.n_max
         # self.use_pca = gym_config.use_pca
         self.with_replacement_oed = gym_config.with_replacement_oed
+        self.old_action_space = gym_config.old_action_space
 
-        # TODO: Does using the same seed for the observation space and action space make sense? Is there a reason?
         self.observation_space = CustomMultiBinary((self.nx, self.ny),
                                               n_sensor=self.n_sensors, seed=self.seed)
-
-        if self.with_replacement_oed:
-            # Action space: for each sensor, 5 possible moves
-            self.action_space = spaces.Discrete(5 * self.n_sensors, seed=self.seed)
+        
+        if self.old_action_space:
+            if self.with_replacement_oed:
+                self.action_space = spaces.Discrete(self.n_sensors * self.grid_size, seed=self.seed)
+            else:
+                self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors), seed=self.seed)
         else:
-            # Action space: for each sensor, 4 possible moves
-            self.action_space = spaces.Discrete(4 * self.n_sensors, seed=self.seed)
+            if self.with_replacement_oed:
+                # Action space: for each sensor, 5 possible moves
+                self.action_space = spaces.Discrete(5 * self.n_sensors, seed=self.seed)
+            else:
+                # Action space: for each sensor, 4 possible moves
+                self.action_space = spaces.Discrete(4 * self.n_sensors, seed=self.seed)
 
         self.pde_field = self.pde_system.step(self.pde_system.initial_condition())
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
@@ -101,48 +108,66 @@ class OED(gym.Env):
         return self.state, info
     
     def step(self, action):
-        if self.with_replacement_oed:
-            # Decode which sensor and which direction
-            sensor_idx = action // 5
-            move_idx = action % 5
-
-            # Directions: up, right, down, left
-            # up    = (row - 1, col)
-            # right = (row, col + 1)
-            # down  = (row + 1, col)
-            # left  = (row, col - 1)
-            # stand-by = (row + 0, col + 0)
-            directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (0,0)]
-
-        else:
-            # Decode which sensor and which direction
-            sensor_idx = action // 4
-            move_idx = action % 4
-
-            # Directions: up, right, down, left
-            # up    = (row - 1, col)
-            # right = (row, col + 1)
-            # down  = (row + 1, col)
-            # left  = (row, col - 1)
-            directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-
-        move = directions[move_idx]
-        old_pos = self.sensor_positions[sensor_idx]
-        new_pos = (old_pos[0] + move[0], old_pos[1] + move[1])
-
-        # Check boundary, ignore the action if out of grid bound
-        if (0 <= new_pos[0] < self.nx) and (0 <= new_pos[1] < self.ny):
-            #if the new cell is already occupied, do nothing, or penalize?
-            if self.state[new_pos[0], new_pos[1]] == 1:
-                pass
+        if self.old_action_space:
+            if self.with_replacement_oed:
+                sensor_idx = action // self.grid_size
+                spot_idx = action % self.grid_size
+                new_pos = (spot_idx // self.nx, spot_idx % self.ny)
+                old_pos = self.sensor_positions[sensor_idx]
             else:
-                # Valid, unoccupied move -> update
-                self.state[old_pos[0], old_pos[1]] = 0
-                self.state[new_pos[0], new_pos[1]] = 1
-                self.sensor_positions[sensor_idx] = new_pos
+                empty_spots = self.grid_size - self.n_sensors
+                sensor_idx = action // empty_spots
+                spot_idx = action % empty_spots
+                empty_pos = np.argwhere(self.state == 0)
+                new_pos = empty_pos[spot_idx]
+                old_pos = self.sensor_positions[sensor_idx]
+                
+            self.state[old_pos[0], old_pos[1]] = 0
+            self.state[new_pos[0], new_pos[1]] = 1
+            self.sensor_positions[sensor_idx] = tuple(new_pos)
         else:
-            # Out of bounds – do nothing, or penalize?
-            pass
+            if self.with_replacement_oed:
+                # Decode which sensor and which direction
+                sensor_idx = action // 5
+                move_idx = action % 5
+
+                # Directions: up, right, down, left
+                # up    = (row - 1, col)
+                # right = (row, col + 1)
+                # down  = (row + 1, col)
+                # left  = (row, col - 1)
+                # stand-by = (row + 0, col + 0)
+                directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (0,0)]
+
+            else:
+                # Decode which sensor and which direction
+                sensor_idx = action // 4
+                move_idx = action % 4
+
+                # Directions: up, right, down, left
+                # up    = (row - 1, col)
+                # right = (row, col + 1)
+                # down  = (row + 1, col)
+                # left  = (row, col - 1)
+                directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+
+            move = directions[move_idx]
+            old_pos = self.sensor_positions[sensor_idx]
+            new_pos = (old_pos[0] + move[0], old_pos[1] + move[1])
+
+            # Check boundary, ignore the action if out of grid bound
+            if (0 <= new_pos[0] < self.nx) and (0 <= new_pos[1] < self.ny):
+                #if the new cell is already occupied, do nothing, or penalize?
+                if self.state[new_pos[0], new_pos[1]] == 1:
+                    pass
+                else:
+                    # Valid, unoccupied move -> update
+                    self.state[old_pos[0], old_pos[1]] = 0
+                    self.state[new_pos[0], new_pos[1]] = 1
+                    self.sensor_positions[sensor_idx] = new_pos
+            else:
+                # Out of bounds – do nothing, or penalize?
+                pass
 
         reward = self.compute_reward()
         
@@ -176,10 +201,11 @@ class OED(gym.Env):
     def compute_reward(self):
         # print(self.sensor_positions)
         sensor_idx = [r * self.ny + c for r, c in self.sensor_positions]
-        Q_m = self.modes[sensor_idx, :]
+        Q_m = self.modes[sensor_idx, :]*10
         # T_m = Q_m.T @ Q_m # Symmetric matrix
         reward = np.linalg.det(Q_m.T @ Q_m)
-        return np.log(reward) if reward > 0 else -float('inf')
+        return reward
+        # return np.log(reward) if reward > 0 else -float('inf')
     
     def render(self):
         pass

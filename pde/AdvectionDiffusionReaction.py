@@ -3,14 +3,14 @@ import fipy as fp
 
 class ADRConfig():
     def __init__(self):
-        self.nx = 100
-        self.ny = 100
+        self.nx = 50
+        self.ny = 50
         
         self.x_domain = [0.0, 1.0]
         self.y_domain = [0.0, 1.0]
         
-        self.t_final = 2.0
-        self.delta_t = 0.1
+        self.t_final = 3.0
+        self.delta_t = 0.001
         self.n_steps = int(self.t_final / self.delta_t)
         self.t_steps = np.arange(0, self.t_final + self.delta_t, self.delta_t)
         
