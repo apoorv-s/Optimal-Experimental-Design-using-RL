@@ -17,8 +17,8 @@ class OEDGymConfig():
 
 
 class CustomMultiBinary(spaces.MultiBinary):
-    def __init__(self, shape, n_sensor, seed=None):
-        super().__init__(shape, seed=seed)
+    def __init__(self, shape, n_sensor):
+        super().__init__(shape)
         self.n_sensor = n_sensor
 
     def sample(self):
@@ -30,13 +30,11 @@ class CustomMultiBinary(spaces.MultiBinary):
 
 class OED(gym.Env):
     metadata = {"render_modes": [None]}
-    def __init__(self, seed, pde_system, gym_config: OEDGymConfig):
+    def __init__(self, pde_system, gym_config: OEDGymConfig):
                 #  n_sensors, max_horizon, n_max,
                 #  use_pca = True, with_replacement_oed = True):
         # with replacement OED means that multiple sensor can be placed at the same location
         super().__init__()
-        self.seed = seed
-        np.random.seed(seed)
         
         self.pde_system = pde_system
         self.nx = pde_system.nx
@@ -50,21 +48,20 @@ class OED(gym.Env):
         self.with_replacement_oed = gym_config.with_replacement_oed
         self.old_action_space = gym_config.old_action_space
 
-        self.observation_space = CustomMultiBinary((self.nx, self.ny),
-                                              n_sensor=self.n_sensors, seed=self.seed)
+        self.observation_space = CustomMultiBinary((self.nx, self.ny), n_sensor=self.n_sensors)
         
         if self.old_action_space:
             if self.with_replacement_oed:
-                self.action_space = spaces.Discrete(self.n_sensors * self.grid_size, seed=self.seed)
+                self.action_space = spaces.Discrete(self.n_sensors * self.grid_size)
             else:
-                self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors), seed=self.seed)
+                self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors))
         else:
             if self.with_replacement_oed:
                 # Action space: for each sensor, 5 possible moves
-                self.action_space = spaces.Discrete(5 * self.n_sensors, seed=self.seed)
+                self.action_space = spaces.Discrete(5 * self.n_sensors)
             else:
                 # Action space: for each sensor, 4 possible moves
-                self.action_space = spaces.Discrete(4 * self.n_sensors, seed=self.seed)
+                self.action_space = spaces.Discrete(4 * self.n_sensors)
 
         self.pde_field = self.pde_system.step(self.pde_system.initial_condition())
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
