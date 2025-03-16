@@ -93,7 +93,10 @@ class OED(gym.Env):
         self.n_episode = 0
         
     def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
+        if seed is not None:
+            super().reset(seed=seed)
+            self.action_space.seed(seed = seed)
+            self.observation_space.seed(seed= seed)
         self.state = self.observation_space.sample()
         self.sensor_positions = [tuple(pos) for pos in np.argwhere(self.state == 1)] # returns sorted index of 1s
         self.max_reward = -np.inf
