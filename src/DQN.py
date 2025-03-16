@@ -4,11 +4,11 @@ from tqdm import trange
 
 
 class DQN_OED():
-    def __init__(self, pde_system, gym_config: OEDGymConfig, verbose = 1):
+    def __init__(self, seed, pde_system, gym_config: OEDGymConfig, verbose = 1):
         self.env = OED(pde_system, gym_config)
         
         # Can define these as inputs to the class
-        self.model = DQN("MlpPolicy", self.env, verbose=verbose, tensorboard_log= "./tensorboard/", policy_kwargs=dict(net_arch=[64, 128, 64]))
+        self.model = DQN("MlpPolicy", self.env, verbose=verbose, tensorboard_log= "./tensorboard/", seed = seed,  policy_kwargs=dict(net_arch=[64, 128, 64]))
         
     def train(self, model_name, total_timesteps=50000, log_interval=10):
         self.model.learn(total_timesteps=total_timesteps, log_interval=log_interval)
