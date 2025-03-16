@@ -3,7 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 # from reward.reward import RewardCalculator
 from sklearn.decomposition import PCA
-
+import copy
 
 class OEDGymConfig():
     def __init__(self):
@@ -11,7 +11,6 @@ class OEDGymConfig():
         self.n_max = 500
         self.max_horizon = 500
         # self.use_pca = True
-        self.with_replacement_oed = True
         self.n_components_rewards = 0.99
         self.old_action_space = False
 
@@ -45,23 +44,15 @@ class OED(gym.Env):
         self.max_horizon = gym_config.max_horizon
         self.n_max = gym_config.n_max
         # self.use_pca = gym_config.use_pca
-        self.with_replacement_oed = gym_config.with_replacement_oed
         self.old_action_space = gym_config.old_action_space
 
         self.observation_space = CustomMultiBinary((self.nx, self.ny), n_sensor=self.n_sensors)
         
         if self.old_action_space:
-            if self.with_replacement_oed:
-                self.action_space = spaces.Discrete(self.n_sensors * self.grid_size)
-            else:
-                self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors))
+            self.action_space = spaces.Discrete(self.n_sensors * (self.grid_size - self.n_sensors))
         else:
-            if self.with_replacement_oed:
-                # Action space: for each sensor, 5 possible moves
-                self.action_space = spaces.Discrete(5 * self.n_sensors)
-            else:
-                # Action space: for each sensor, 4 possible moves
-                self.action_space = spaces.Discrete(4 * self.n_sensors)
+            # Action space: for each sensor, 4 possible moves
+            self.action_space = spaces.Discrete(4 * self.n_sensors)
 
         self.pde_field = self.pde_system.step(self.pde_system.initial_condition())
         self.pde_field = np.transpose(self.pde_field, (1, 2, 0))
@@ -85,7 +76,6 @@ class OED(gym.Env):
             
             
         self.state = None  # Sensor position in nx x ny grid with n_sensors 1s
-        self.sensor_positions = None  # List of sensor positions (row_i, col_i)_{i=1:n_sensors}
         self.max_reward = -np.inf
         self.N = 0 # number of steps since reward last improved
         self.optimal_state = None
@@ -98,7 +88,6 @@ class OED(gym.Env):
             self.action_space.seed(seed = seed)
             self.observation_space.seed(seed= seed)
         self.state = self.observation_space.sample()
-        self.sensor_positions = [tuple(pos) for pos in np.argwhere(self.state == 1)] # returns sorted index of 1s
         self.max_reward = -np.inf
         self.optimal_state = None
         self.n_episode += 1
@@ -106,71 +95,46 @@ class OED(gym.Env):
         self.t = 0
         self.N = 0
         return self.state, info
-    
-    def step(self, action):
+
+    def update_state_and_reward(self, current_state, action):
+        # move the logic to update state and reward seperately from step() without changing self states to be used by MCTS
+        # make a copy to avoid overwritten the current state input
+        new_state = copy.deepcopy(current_state)
+        new_sensor_positions = [tuple(pos) for pos in np.argwhere(new_state == 1)]
         if self.old_action_space:
-            if self.with_replacement_oed:
-                sensor_idx = action // self.grid_size
-                spot_idx = action % self.grid_size
-                new_pos = (spot_idx // self.nx, spot_idx % self.ny)
-                old_pos = self.sensor_positions[sensor_idx]
-            else:
-                empty_spots = self.grid_size - self.n_sensors
-                sensor_idx = action // empty_spots
-                spot_idx = action % empty_spots
-                empty_pos = np.argwhere(self.state == 0)
-                new_pos = empty_pos[spot_idx]
-                old_pos = self.sensor_positions[sensor_idx]
-                
-            self.state[old_pos[0], old_pos[1]] = 0
-            self.state[new_pos[0], new_pos[1]] = 1
-            self.sensor_positions[sensor_idx] = tuple(new_pos)
+            empty_spots = self.grid_size - self.n_sensors
+            sensor_idx = action // empty_spots
+            spot_idx = action % empty_spots
+            empty_pos = np.argwhere(new_state == 0)
+            new_pos = empty_pos[spot_idx]
+            old_pos = new_sensor_positions[sensor_idx]
+
+            new_state[old_pos[0], old_pos[1]] = 0
+            new_state[new_pos[0], new_pos[1]] = 1
+            new_sensor_positions[sensor_idx] = tuple(new_pos)
+
         else:
-            if self.with_replacement_oed:
-                # Decode which sensor and which direction
-                sensor_idx = action // 5
-                move_idx = action % 5
-
-                # Directions: up, right, down, left
-                # up    = (row - 1, col)
-                # right = (row, col + 1)
-                # down  = (row + 1, col)
-                # left  = (row, col - 1)
-                # stand-by = (row + 0, col + 0)
-                directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (0,0)]
-
-            else:
-                # Decode which sensor and which direction
-                sensor_idx = action // 4
-                move_idx = action % 4
-
-                # Directions: up, right, down, left
-                # up    = (row - 1, col)
-                # right = (row, col + 1)
-                # down  = (row + 1, col)
-                # left  = (row, col - 1)
-                directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-
+            sensor_idx = action // 4
+            move_idx = action % 4
+            # Directions: up, right, down, left
+            directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
             move = directions[move_idx]
-            old_pos = self.sensor_positions[sensor_idx]
+            old_pos = new_sensor_positions[sensor_idx]
             new_pos = (old_pos[0] + move[0], old_pos[1] + move[1])
 
-            # Check boundary, ignore the action if out of grid bound
+            # Only update if new position is valid: within bounds and unoccupied.
             if (0 <= new_pos[0] < self.nx) and (0 <= new_pos[1] < self.ny):
-                #if the new cell is already occupied, do nothing, or penalize?
-                if self.state[new_pos[0], new_pos[1]] == 1:
-                    pass
-                else:
-                    # Valid, unoccupied move -> update
-                    self.state[old_pos[0], old_pos[1]] = 0
-                    self.state[new_pos[0], new_pos[1]] = 1
-                    self.sensor_positions[sensor_idx] = new_pos
-            else:
-                # Out of bounds – do nothing, or penalize?
-                pass
+                if new_state[new_pos[0], new_pos[1]] != 1:
+                    new_state[old_pos[0], old_pos[1]] = 0
+                    new_state[new_pos[0], new_pos[1]] = 1
+                    new_sensor_positions[sensor_idx] = new_pos
 
-        reward = self.compute_reward()
-        
+        reward = self.compute_reward(new_sensor_positions)
+        return new_state, reward
+
+    def step(self, action):
+        new_state, reward = self.update_state_and_reward(self.state, action)
+        self.state = new_state
         if reward > self.max_reward:
             self.max_reward = reward
             self.optimal_state = self.state.copy()
@@ -198,9 +162,9 @@ class OED(gym.Env):
 
     #     return np.log(reward) if reward > 0 else -float('inf')
     
-    def compute_reward(self):
+    def compute_reward(self, sensor_positions):
         # print(self.sensor_positions)
-        sensor_idx = [r * self.ny + c for r, c in self.sensor_positions]
+        sensor_idx = [r * self.ny + c for r, c in sensor_positions]
         Q_m = self.modes[sensor_idx, :]*10
         # T_m = Q_m.T @ Q_m # Symmetric matrix
         reward = np.linalg.det(Q_m.T @ Q_m)
