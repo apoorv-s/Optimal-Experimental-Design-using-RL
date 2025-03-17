@@ -89,10 +89,6 @@ class MCTS:
 
         #keep track of node explored
         self.node_explored = 0
-        # keep track of learning step
-        self.learning_step = 0
-        #epsisode done flag set to true
-        self.episode_done = True
         #current root node
         self.root = None
         #current branch tracking for backpropagation
@@ -101,20 +97,27 @@ class MCTS:
 
     def train(self,total_timestep= 50000):
         # total_timestep is the time that this function call env.step(), this does not include iterations in tree
-        while self.learning_step < total_timestep:
-            if self.episode_done:
-                env_state, info = self.env.reset(seed=self.seed + self.learning_step)
-                self.episode_done = False
+        env_state, info = self.env.reset(seed=self.seed)
+        learning_step = 0
+        while learning_step < total_timestep:
             # choose the best next action
-            best_action = self.best_action(env_state)
+            self.network.eval() # turn network to eval mode
+            best_action, action_probs = self.best_action(env_state)
+            #todo: some data structure to store env_state and action_probs and update reward till the end of episode
+
             # step the env according to best action
             env_state, reward, done, truncated, info = self.env.step(best_action)
+            learning_step += 1
 
+            if done:
+                env_state, info = self.env.reset(seed=self.seed + learning_step)
+                # each time the self.best_action is called, we have to wait till the end of the episode to see all the cumulative reward of that action
+                # the network will learn to match that env_state to action_probs and cumulative rewards
+                self.network.train() #turn network to train mode to learn here
+                #todo: training code for neural network
+        #save the trained model and the optimizer statedict
 
-            # learn network
-            self.learning_step += 1
-            self.episode_done = done
-
+    @torch.no_grad()
     def expand(self, parent_node, parent_depth):
         """This function accepts a parent node, and expand to best child according to policy"""
         # add to current branch
@@ -174,3 +177,4 @@ class MCTS:
             assert len(self.current_branch) == 0
 
         #choose best action based on frequency visit at root node
+        return 1, 2
