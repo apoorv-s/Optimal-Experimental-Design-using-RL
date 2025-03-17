@@ -8,7 +8,6 @@ import copy
 class OEDGymConfig():
     def __init__(self):
         self.n_sensor = 5
-        self.n_max = 500
         self.max_horizon = 500
         # self.use_pca = True
         self.n_components_rewards = 0.99
@@ -42,7 +41,6 @@ class OED(gym.Env):
         
         self.n_sensors = gym_config.n_sensor
         self.max_horizon = gym_config.max_horizon
-        self.n_max = gym_config.n_max
         # self.use_pca = gym_config.use_pca
         self.old_action_space = gym_config.old_action_space
 
@@ -77,7 +75,6 @@ class OED(gym.Env):
             
         self.state = None  # Sensor position in nx x ny grid with n_sensors 1s
         self.max_reward = -np.inf
-        self.N = 0 # number of steps since reward last improved
         self.optimal_state = None
         self.t = 0
         self.n_episode = 0
@@ -93,7 +90,6 @@ class OED(gym.Env):
         self.n_episode += 1
         info = {}
         self.t = 0
-        self.N = 0
         return self.state, info
 
     def update_state_and_reward(self, current_state, action):
@@ -138,12 +134,9 @@ class OED(gym.Env):
         if reward > self.max_reward:
             self.max_reward = reward
             self.optimal_state = self.state.copy()
-            self.N = 0
-        else:
-            self.N += 1
             
         self.t += 1
-        done = (self.N > self.n_max) or (self.t > self.max_horizon)
+        done = (self.t > self.max_horizon)
 
         info = {"optimal_state": self.optimal_state,
                 "max_reward": self.max_reward}
