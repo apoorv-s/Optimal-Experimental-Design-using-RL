@@ -164,3 +164,8 @@ _output/
 *.pdf
 *.zip
 tensorboard/
+*.err
+*.out
+*.pt
+trained_model/
+*.mat

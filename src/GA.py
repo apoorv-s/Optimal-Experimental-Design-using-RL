@@ -12,8 +12,8 @@ class GAConfig():
         self.generations = 100
 
 class GA_OED():
-    def __init__(self, seed, pde_system, gym_config: OEDGymConfig, ga_config: GAConfig):
-        self.env = OED(seed, pde_system, gym_config)
+    def __init__(self, pde_system, gym_config: OEDGymConfig, ga_config: GAConfig):
+        self.env = OED(pde_system, gym_config)
         self.n_sensor = gym_config.n_sensor
         self.grid_size = self.env.grid_size
         self.nx = self.env.nx
@@ -151,8 +151,8 @@ class GA_OED():
         # else:
         #     reward = self.env.reward_calculator.compute_reward_function(flat_indices)
         
-        self.env.sensor_positions = sensor_positions
-        reward = self.env.compute_reward()
+        # self.env.sensor_positions = sensor_positions
+        reward = self.env.compute_reward(sensor_positions)
         return reward,
     
     def run(self):
