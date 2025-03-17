@@ -208,4 +208,7 @@ class MCTS:
             # recursively backprob at leaf node, all the way to root node
             self.backpropagation(current_node)
         #choose best action based on frequency visit at root node
-        return 1, 2
+        root_N = np.array([self.root.children[a].N if a in self.root.children else 0 for a in range(self.action_space)])
+        mcts_action_probs = root_N / root_N.sum()
+        best_action = np.argmax(mcts_action_probs)
+        return best_action, mcts_action_probs
