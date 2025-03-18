@@ -136,7 +136,7 @@ class OED(gym.Env):
             self.optimal_state = self.state.copy()
             
         self.t += 1
-        done = (self.t > self.max_horizon)
+        done = (self.t > self.max_horizon - 1)
 
         info = {"optimal_state": self.optimal_state,
                 "max_reward": self.max_reward}
