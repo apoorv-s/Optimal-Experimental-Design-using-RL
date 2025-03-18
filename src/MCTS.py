@@ -196,15 +196,14 @@ class MCTS:
             state_value, next_state_prior = self.network(
                 torch.tensor(current_node.state, dtype=torch.float32).unsqueeze(0)
             )
-
+            # increase node explored count
+            self.node_explored += 1
             # a leaf is the node that just got visited (no backprop yet to increase N)
             is_leaf = (current_node.N == 0)
             # return the leaf node so begin backprop back to root node before next expansion
             if is_leaf:
                 # only set node value if new node, otherwise this already contained information from previous backprop
                 current_node.V_s = float(state_value)
-                # increase node explored count
-                self.node_explored += 1
                 return current_node
 
             current_depth += 1
@@ -272,9 +271,7 @@ class MCTS:
         #set root node
         self.root = node(env_state, None, 0) #reward at root node doesn't matter, hence set to 0
         self.node_explored = 0
-        # there is an edge case, where the maximum nodes in the tree with max depth < max_node, causing infinity loop
-        max_node_to_explored = 1 + (self.max_depth - 1) * self.action_space
-        while self.node_explored < min(self.max_node, max_node_to_explored):
+        while self.node_explored < self.max_node:
             #expand the root node, until leaf node or max depth is reached
             current_node = self.expand(self.root, 0)
             # recursively backprob at leaf node, all the way to root node
