@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy  as np
 from torch.utils.data import Dataset, DataLoader
-
+from tqdm import trange
 class MCTSConfig():
     def __init__(self):
         self.max_node = 1000
@@ -143,10 +143,13 @@ class MCTS:
         learning_step = 0
         step_since_start_episode = 0
         while learning_step < total_timestep:
+            print(f"Starting learning step {learning_step + 1}/{total_timestep}")
             # set the max_depth of tree here, so MCTS only search to the end of the episode
             self.max_depth = self.env.max_horizon - step_since_start_episode
             # choose the best next action
+            print("start search")
             best_action, action_probs = self.search(env_state)
+            print("end search")
             mtcs_data = [env_state, action_probs, None]
             # step the env according to best action
             env_state, reward, done, truncated, info = self.env.step(best_action)
@@ -162,7 +165,9 @@ class MCTS:
                 # now that the episode is done, store episode memory into training memory
                 self.add_to_training_memory()
                 # the network will learn to match that env_state to action_probs and cumulative rewards
+                print("start training nn")
                 self.learn()
+                print("end training nn")
         #save the trained model and the optimizer statedict
         torch.save(self.network.state_dict(), f"MCTS_trained_data/model.pt")
         torch.save(self.optimizer.state_dict(), f"MCTS_trained_data/optimizer.pt")
@@ -266,7 +271,9 @@ class MCTS:
         #set root node
         self.root = node(env_state, None, 0) #reward at root node doesn't matter, hence set to 0
         self.node_explored = 0
-        while self.node_explored < self.max_node:
+        # there is an edge case, where the maximum nodes in the tree with max depth < max_node, causing infinity loop
+        max_node_to_explored = 1 + (self.max_depth - 1) * self.action_space
+        while self.node_explored < min(self.max_node, max_node_to_explored):
             #expand the root node, until leaf node or max depth is reached
             current_node = self.expand(self.root, 0)
             # recursively backprob at leaf node, all the way to root node
@@ -276,3 +283,27 @@ class MCTS:
         mcts_action_probs = root_N / root_N.sum()
         best_action = np.argmax(mcts_action_probs)
         return best_action, mcts_action_probs
+
+    def evaluate(self, num_episodes=100):
+        all_episode_rewards = []
+        best_rewards = []
+        optimal_states_all = []
+        for episode_idx in trange(num_episodes):
+            obs, _ = self.env.reset(seed=episode_idx)
+            episode_rewards = []
+            done = False
+            truncated = False
+            print(f"Starting episode {episode_idx + 1}/{num_episodes}")
+            step = 0
+            while not done and not truncated:
+                action, _states = self.search(obs)
+                obs, reward, done, truncated, info = self.env.step(action)
+                episode_rewards.append(reward)
+                step += 1
+                print(f"  Step {step}, Current reward: {reward:.6f}")
+            best_rewards.append(info["max_reward"])
+            all_episode_rewards.append(episode_rewards)
+            optimal_states_all.append(info["optimal_state"])
+            print(f"Episode {episode_idx + 1}/{num_episodes} complete - Max Reward: {info['max_reward']:.6f}")
+
+        return all_episode_rewards, best_rewards, optimal_states_all
