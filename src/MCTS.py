@@ -145,7 +145,7 @@ class MCTS:
         while learning_step < total_timestep:
             print(f"Starting learning step {learning_step + 1}/{total_timestep}")
             # set the max_depth of tree here, so MCTS only search to the end of the episode
-            self.max_depth = self.env.max_horizon - step_since_start_episode
+            self.max_depth = self.env.max_horizon - step_since_start_episode + 1
             # choose the best next action
             print("start search")
             best_action, action_probs = self.search(env_state)
@@ -184,6 +184,7 @@ class MCTS:
                 loss = policy_loss + value_loss
                 self.optimizer.zero_grad()
                 loss.backward()
+                # torch.nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=1.0) #quick fix for when gradient explosion happens!!!
                 self.optimizer.step()
 
     @torch.no_grad()
