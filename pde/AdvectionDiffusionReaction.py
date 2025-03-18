@@ -14,9 +14,9 @@ class ADRConfig():
         self.n_steps = int(self.t_final / self.delta_t)
         self.t_steps = np.arange(0, self.t_final + self.delta_t, self.delta_t)
         
-        self.diff_coeff = 0.0
-        self.adv_coeff = (0.2, 0.2)
-        self.react_coeff = 0.0
+        self.diff_coeff = 0.02
+        self.adv_coeff = (0.1, 0.1)
+        self.react_coeff = -0.01
         
         self.x0 = 0.25
         self.y0 = 0.25

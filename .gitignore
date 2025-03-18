@@ -161,7 +161,6 @@ cython_debug/
 
 .DS_Store
 _output/
-*.pdf
 *.zip
 tensorboard/
 *.err
@@ -169,3 +168,7 @@ tensorboard/
 *.pt
 trained_model/
 *.mat
+GAResults/
+Misc/
+MCTS_results/
+OldFigures/

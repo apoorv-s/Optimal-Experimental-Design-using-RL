@@ -169,8 +169,10 @@ class MCTS:
                 self.learn()
                 print("end training nn")
         #save the trained model and the optimizer statedict
-        torch.save(self.network.state_dict(), f"MCTS_trained_data/model.pt")
-        torch.save(self.optimizer.state_dict(), f"MCTS_trained_data/optimizer.pt")
+        
+        print("saving model and optimizer")
+        torch.save(self.network.state_dict(), f"MCTS_results/model.pt")
+        torch.save(self.optimizer.state_dict(), f"MCTS_results/optimizer.pt")
 
     def learn(self):
         # learning sanctuary of the network :)
@@ -305,3 +307,7 @@ class MCTS:
             print(f"Episode {episode_idx + 1}/{num_episodes} complete - Max Reward: {info['max_reward']:.6f}")
 
         return all_episode_rewards, best_rewards, optimal_states_all
+    
+    def load_model(self, model_path, optimizer_path):
+        self.network.load_state_dict(torch.load(model_path))
+        self.optimizer.load_state_dict(torch.load(optimizer_path))
