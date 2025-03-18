@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy  as np
+from torch.utils.data import Dataset, DataLoader
 
 class MCTSConfig():
     def __init__(self):
@@ -12,6 +13,9 @@ class MCTSConfig():
         self.hidden_size = 100
         self.gamma = 1 #discount factor
         self.prior_score_scale_factor = 1
+        self.lr = 0.001 #standard value of Adam lr
+        self.batch_size = 32 #similar to stable-baseline2 DQN
+        self.n_epochs = 10 # similar to stable-baseline2 PPO
 
 class MLPNetwork(nn.Module):
     def __init__(self, nx, ny, num_actions, num_layers, hidden_size):
@@ -66,6 +70,26 @@ class node:
         self.R = reward
 
 
+class TrainingMemory(Dataset): #dataset class for batch training
+    def __init__(self):
+        self.data = []
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        # Each sample is [state, action_probs, value]
+        state, action_probs, value = self.data[idx]
+        # Convert the state and target1 to tensors.
+        state_tensor = torch.tensor(state, dtype=torch.float32)
+        target1_tensor = torch.tensor(action_probs, dtype=torch.float32)
+        # Wrap the float target in a one-element tensor.
+        target2_tensor = torch.tensor([value], dtype=torch.float32)
+        return state_tensor, target1_tensor, target2_tensor
+
+    def add_data(self, new_sample):
+        self.data += new_sample
+
 class MCTS:
     def __init__(self, seed, pde_system, gym_config: OEDGymConfig, mcts_config: MCTSConfig):
         self.env = OED(pde_system, gym_config)
@@ -76,7 +100,9 @@ class MCTS:
         else:
             self.action_space = 4 * gym_config.n_sensor
         self.network = MLPNetwork(pde_system.nx, pde_system.ny, self.action_space, mcts_config.num_layers, mcts_config.hidden_size)
-
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr = mcts_config.lr) # standard Adam optimizer
+        self.n_epochs = mcts_config.n_epochs
+        self.batch_size = mcts_config.batch_size
         # max node to search
         self.max_node = mcts_config.max_node
         # max depth of the tree before exploring another branch from current root
@@ -92,6 +118,25 @@ class MCTS:
         #current root node
         self.root = None
 
+        # The episode memory is to track all the MCTS action and its cumulative rewards through out the episode
+        # After the episode concludes, the episode memory will be moved to training memory
+        # The training of the neural network will be based on the training memory
+        self.episode_memory = []
+        self.training_memory = TrainingMemory()
+
+    def add_to_episode_memory(self, mtcs_data):
+        # each element of episode_memory track the env state and the action probs given by MCTS search, and its cummulative reward to the end of the episode
+        # so we need to add the new reward to the previous element's value
+        # e.g. The first action cumulative reward is r1 + gamma * r2 + gamma ** 2 * r3 +....+ gamma ** (n-1) * mtcs_data[3] after n step in the episode
+        n = len(self.episode_memory)
+        for i in range(n):
+            self.episode_memory[i][2] += mtcs_data[2] * (self.gamma ** (n-i))
+        self.episode_memory.append(mtcs_data)
+
+    def add_to_training_memory(self):
+        self.training_memory.add_data(self.episode_memory)
+        self.episode_memory = []
+
     def train(self,total_timestep= 50000):
         # total_timestep is the time that this function call env.step(), this does not include iterations in tree
         env_state, info = self.env.reset(seed=self.seed)
@@ -101,22 +146,40 @@ class MCTS:
             # set the max_depth of tree here, so MCTS only search to the end of the episode
             self.max_depth = self.env.max_horizon - step_since_start_episode
             # choose the best next action
-            self.network.eval() # turn network to eval mode
             best_action, action_probs = self.search(env_state)
-            #todo: some data structure to store env_state and action_probs and update reward till the end of episode
-
+            mtcs_data = [env_state, action_probs, None]
             # step the env according to best action
             env_state, reward, done, truncated, info = self.env.step(best_action)
+            mtcs_data[2] = reward
+            # store into episode memory
+            self.add_to_episode_memory(mtcs_data)
             learning_step += 1
             step_since_start_episode += 1
             if done:
                 env_state, info = self.env.reset(seed=self.seed + learning_step)
                 step_since_start_episode = 0
                 # each time the self.best_action is called, we have to wait till the end of the episode to see all the cumulative reward of that action
+                # now that the episode is done, store episode memory into training memory
+                self.add_to_training_memory()
                 # the network will learn to match that env_state to action_probs and cumulative rewards
-                self.network.train() #turn network to train mode to learn here
-                #todo: training code for neural network
+                self.learn()
         #save the trained model and the optimizer statedict
+        torch.save(self.network.state_dict(), f"MCTS_trained_data/model.pt")
+        torch.save(self.optimizer.state_dict(), f"MCTS_trained_data/optimizer.pt")
+
+    def learn(self):
+        # learning sanctuary of the network :)
+        self.network.train() # turn network to train mode to learn here
+        batch_loader = DataLoader(self.training_memory, batch_size= self.batch_size, shuffle = True)
+        for epoch in range(self.n_epochs):
+            for states, action_probs, value in batch_loader:
+                pred_value, pred_probs = self.network(states)
+                policy_loss = F.cross_entropy(pred_probs, action_probs)
+                value_loss = F.mse_loss(pred_value, value)
+                loss = policy_loss + value_loss
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
     @torch.no_grad()
     def expand(self, current_node, parent_depth):
@@ -199,6 +262,7 @@ class MCTS:
             current_node = current_node.parent
 
     def search(self, env_state):
+        self.network.eval()  # turn network to eval mode
         #set root node
         self.root = node(env_state, None, 0) #reward at root node doesn't matter, hence set to 0
         self.node_explored = 0
