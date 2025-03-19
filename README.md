@@ -62,3 +62,5 @@ The project utilizes **Karhunen-Loève decomposition (KLD)** to reduce the dimen
   * Large-jump DQN outperforms adjacent-cell DQN.  
   * Both methods fall short of GA.  
   * Instability attributed to complex features.  
+
+Full report for the project can be found [here](Assets/Project_report.pdf).
