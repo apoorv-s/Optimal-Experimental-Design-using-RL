@@ -172,3 +172,4 @@ GAResults/
 Misc/
 MCTS_results/
 OldFigures/
+*.tar.gz
